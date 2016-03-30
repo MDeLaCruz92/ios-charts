@@ -20,6 +20,7 @@
 #import "PieChartViewController.h"
 #import "ScatterChartViewController.h"
 #import "StackedBarChartViewController.h"
+#import "NegativeStackedBarChartViewController.h"
 #import "AnotherBarChartViewController.h"
 #import "MultipleLinesChartViewController.h"
 #import "MultipleBarChartViewController.h"
@@ -28,6 +29,9 @@
 #import "RadarChartViewController.h"
 #import "ColoredLineChartViewController.h"
 #import "SinusBarChartViewController.h"
+#import "PositiveNegativeBarChartViewController.h"
+#import "BubbleChartViewController.h"
+#import "RealmDemoListViewController.h"
 
 @interface DemoListViewController () <UITableViewDataSource, UITableViewDelegate>
 
@@ -80,9 +84,19 @@
                           @"class": ScatterChartViewController.class
                           },
                       @{
+                          @"title": @"Bubble Chart",
+                          @"subtitle": @"A simple demonstration of the bubble chart.",
+                          @"class": BubbleChartViewController.class
+                          },
+                      @{
                           @"title": @"Stacked Bar Chart",
                           @"subtitle": @"A simple demonstration of a bar chart with stacked bars.",
                           @"class": StackedBarChartViewController.class
+                          },
+                      @{
+                          @"title": @"Stacked Bar Chart Negative",
+                          @"subtitle": @"A simple demonstration of stacked bars with negative and positive values.",
+                          @"class": NegativeStackedBarChartViewController.class
                           },
                       @{
                           @"title": @"Another Bar Chart",
@@ -124,6 +138,17 @@
                           @"subtitle": @"A Bar Chart plotting the sinus function with 8.000 values.",
                           @"class": SinusBarChartViewController.class
                           },
+                      @{
+                          
+                          @"title": @"BarChart positive / negative",
+                          @"subtitle": @"This demonstrates how to create a BarChart with positive and negative values in different colors.",
+                          @"class": PositiveNegativeBarChartViewController.class
+                          },
+                      @{
+                          @"title": @"Realm.io database",
+                          @"subtitle": @"This demonstrates how to use this library with Realm.io mobile database.",
+                          @"class": RealmDemoListViewController.class
+                          }
                       ];
 }
 

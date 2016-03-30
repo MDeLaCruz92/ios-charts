@@ -37,14 +37,15 @@
                      @{@"key": @"toggleFilled", @"label": @"Toggle Filled"},
                      @{@"key": @"toggleCircles", @"label": @"Toggle Circles"},
                      @{@"key": @"toggleCubic", @"label": @"Toggle Cubic"},
+                     @{@"key": @"toggleStepped", @"label": @"Toggle Stepped"},
                      @{@"key": @"toggleHighlight", @"label": @"Toggle Highlight"},
-                     @{@"key": @"toggleStartZero", @"label": @"Toggle StartZero"},
                      @{@"key": @"animateX", @"label": @"Animate X"},
                      @{@"key": @"animateY", @"label": @"Animate Y"},
                      @{@"key": @"animateXY", @"label": @"Animate XY"},
-                     @{@"key": @"toggleAdjustXLegend", @"label": @"Toggle AdjustXLegend"},
                      @{@"key": @"saveToGallery", @"label": @"Save to Camera Roll"},
                      @{@"key": @"togglePinchZoom", @"label": @"Toggle PinchZoom"},
+                     @{@"key": @"toggleAutoScaleMinMax", @"label": @"Toggle auto scale min/max"},
+                     @{@"key": @"toggleData", @"label": @"Toggle Data"},
                      ];
     
     _chartView.delegate = self;
@@ -52,16 +53,24 @@
     _chartView.descriptionText = @"";
     _chartView.noDataTextDescription = @"You need to provide data for the chart.";
     
+    _chartView.drawBordersEnabled = YES;
+    
+    _chartView.leftAxis.drawAxisLineEnabled = NO;
+    _chartView.leftAxis.drawGridLinesEnabled = NO;
+    _chartView.rightAxis.drawAxisLineEnabled = NO;
+    _chartView.rightAxis.drawGridLinesEnabled = NO;
+    _chartView.xAxis.drawAxisLineEnabled = NO;
+    _chartView.xAxis.drawGridLinesEnabled = NO;
+
     _chartView.drawGridBackgroundEnabled = NO;
-    _chartView.highlightEnabled = YES;
     _chartView.dragEnabled = YES;
     [_chartView setScaleEnabled:YES];
     _chartView.pinchZoomEnabled = NO;
     
     _chartView.legend.position = ChartLegendPositionRightOfChart;
     
-    _sliderX.value = 19.f;
-    _sliderY.value = 10.f;
+    _sliderX.value = 19.0;
+    _sliderY.value = 10.0;
     [self slidersValueChanged:nil];
 }
 
@@ -71,7 +80,18 @@
     // Dispose of any resources that can be recreated.
 }
 
-- (void)setDataCount:(int)count range:(float)range
+- (void)updateChartData
+{
+    if (self.shouldHideData)
+    {
+        _chartView.data = nil;
+        return;
+    }
+    
+    [self setDataCount:(_sliderX.value + 1) range:_sliderY.value];
+}
+
+- (void)setDataCount:(int)count range:(double)range
 {
     NSMutableArray *xVals = [[NSMutableArray alloc] init];
     
@@ -90,13 +110,13 @@
         
         for (int i = 0; i < count; i++)
         {
-            float val = (float) (arc4random_uniform(range) + 3);
+            double val = (double) (arc4random_uniform(range) + 3);
             [values addObject:[[ChartDataEntry alloc] initWithValue:val xIndex:i]];
         }
         
         LineChartDataSet *d = [[LineChartDataSet alloc] initWithYVals:values label:[NSString stringWithFormat:@"DataSet %d", z + 1]];
-        d.lineWidth = 2.5f;
-        d.circleRadius = 4.f;
+        d.lineWidth = 2.5;
+        d.circleRadius = 4.0;
         
         UIColor *color = colors[z % colors.count];
         [d setColor:color];
@@ -115,96 +135,50 @@
 
 - (void)optionTapped:(NSString *)key
 {
-    if ([key isEqualToString:@"toggleValues"])
-    {
-        for (ChartDataSet *set in _chartView.data.dataSets)
-        {
-            set.drawValuesEnabled = !set.isDrawValuesEnabled;
-        }
-        
-        [_chartView setNeedsDisplay];
-    }
-    
     if ([key isEqualToString:@"toggleFilled"])
     {
-        for (LineChartDataSet *set in _chartView.data.dataSets)
+        for (id<ILineChartDataSet> set in _chartView.data.dataSets)
         {
             set.drawFilledEnabled = !set.isDrawFilledEnabled;
         }
         
         [_chartView setNeedsDisplay];
+        return;
     }
     
     if ([key isEqualToString:@"toggleCircles"])
     {
-        for (LineChartDataSet *set in _chartView.data.dataSets)
+        for (id<ILineChartDataSet> set in _chartView.data.dataSets)
         {
             set.drawCirclesEnabled = !set.isDrawCirclesEnabled;
         }
         
         [_chartView setNeedsDisplay];
+        return;
     }
     
     if ([key isEqualToString:@"toggleCubic"])
     {
-        for (LineChartDataSet *set in _chartView.data.dataSets)
+        for (id<ILineChartDataSet> set in _chartView.data.dataSets)
         {
             set.drawCubicEnabled = !set.isDrawCubicEnabled;
         }
         
         [_chartView setNeedsDisplay];
+        return;
     }
-    
-    if ([key isEqualToString:@"toggleHighlight"])
+
+    if ([key isEqualToString:@"toggleStepped"])
     {
-        _chartView.highlightEnabled = !_chartView.isHighlightEnabled;
-        
+        for (id<ILineChartDataSet> set in _chartView.data.dataSets)
+        {
+            set.drawSteppedEnabled = !set.isDrawSteppedEnabled;
+        }
+
         [_chartView setNeedsDisplay];
     }
     
-    if ([key isEqualToString:@"toggleStartZero"])
-    {
-        _chartView.leftAxis.startAtZeroEnabled = !_chartView.leftAxis.isStartAtZeroEnabled;
-        _chartView.rightAxis.startAtZeroEnabled = !_chartView.rightAxis.isStartAtZeroEnabled;
-        
-        [_chartView notifyDataSetChanged];
-    }
-    
-    if ([key isEqualToString:@"animateX"])
-    {
-        [_chartView animateWithXAxisDuration:3.0];
-    }
-    
-    if ([key isEqualToString:@"animateY"])
-    {
-        [_chartView animateWithYAxisDuration:3.0];
-    }
-    
-    if ([key isEqualToString:@"animateXY"])
-    {
-        [_chartView animateWithXAxisDuration:3.0 yAxisDuration:3.0];
-    }
-    
-    if ([key isEqualToString:@"toggleAdjustXLegend"])
-    {
-        ChartXAxis *xLabels = _chartView.xAxis;
-        
-        xLabels.adjustXLabelsEnabled = !xLabels.isAdjustXLabelsEnabled;
-        
-        [_chartView setNeedsDisplay];
-    }
-    
-    if ([key isEqualToString:@"saveToGallery"])
-    {
-        [_chartView saveToCameraRoll];
-    }
-    
-    if ([key isEqualToString:@"togglePinchZoom"])
-    {
-        _chartView.pinchZoomEnabled = !_chartView.isPinchZoomEnabled;
-        
-        [_chartView setNeedsDisplay];
-    }
+    [super handleOption:key forChartView:_chartView];
 }
 
 #pragma mark - Actions
@@ -214,7 +188,7 @@
     _sliderTextX.text = [@((int)_sliderX.value + 1) stringValue];
     _sliderTextY.text = [@((int)_sliderY.value) stringValue];
     
-    [self setDataCount:(_sliderX.value + 1) range:_sliderY.value];
+    [self updateChartData];
 }
 
 #pragma mark - ChartViewDelegate

@@ -13,22 +13,23 @@
 //
 
 import Foundation
-import UIKit
+import CoreGraphics
 
 public class ChartAxisBase: ChartComponentBase
 {
-    public var labelFont = UIFont.systemFontOfSize(10.0)
-    public var labelTextColor = UIColor.blackColor()
+    public var labelFont = NSUIFont.systemFontOfSize(10.0)
+    public var labelTextColor = NSUIColor.blackColor()
     
-    public var axisLineColor = UIColor.grayColor()
+    public var axisLineColor = NSUIColor.grayColor()
     public var axisLineWidth = CGFloat(0.5)
     public var axisLineDashPhase = CGFloat(0.0)
     public var axisLineDashLengths: [CGFloat]!
     
-    public var gridColor = UIColor.grayColor().colorWithAlphaComponent(0.9)
+    public var gridColor = NSUIColor.grayColor().colorWithAlphaComponent(0.9)
     public var gridLineWidth = CGFloat(0.5)
     public var gridLineDashPhase = CGFloat(0.0)
     public var gridLineDashLengths: [CGFloat]!
+    public var gridLineCap = CGLineCap.Butt
     
     public var drawGridLinesEnabled = true
     public var drawAxisLineEnabled = true
@@ -36,24 +37,25 @@ public class ChartAxisBase: ChartComponentBase
     /// flag that indicates of the labels of this axis should be drawn or not
     public var drawLabelsEnabled = true
     
-    public var xOffset = CGFloat(5.0)
-    public var yOffset = CGFloat(5.0)
-    
     /// array of limitlines that can be set for the axis
     private var _limitLines = [ChartLimitLine]()
     
     /// Are the LimitLines drawn behind the data or in front of the data?
-    /// :default: false
+    /// 
+    /// **default**: false
     public var drawLimitLinesBehindDataEnabled = false
+
+    /// the flag can be used to turn off the antialias for grid lines
+    public var gridAntialiasEnabled = true
 
     public override init()
     {
-        super.init();
+        super.init()
     }
     
     public func getLongestLabel() -> String
     {
-        fatalError("getLongestLabel() cannot be called on ChartAxisBase");
+        fatalError("getLongestLabel() cannot be called on ChartAxisBase")
     }
     
     public var isDrawGridLinesEnabled: Bool { return drawGridLinesEnabled; }
@@ -63,24 +65,25 @@ public class ChartAxisBase: ChartComponentBase
     public var isDrawLabelsEnabled: Bool { return drawLabelsEnabled; }
     
     /// Are the LimitLines drawn behind the data or in front of the data?
-    /// :default: false
+    /// 
+    /// **default**: false
     public var isDrawLimitLinesBehindDataEnabled: Bool { return drawLimitLinesBehindDataEnabled; }
     
     /// Adds a new ChartLimitLine to this axis.
     public func addLimitLine(line: ChartLimitLine)
     {
-        _limitLines.append(line);
+        _limitLines.append(line)
     }
     
     /// Removes the specified ChartLimitLine from the axis.
     public func removeLimitLine(line: ChartLimitLine)
     {
-        for (var i = 0; i < _limitLines.count; i++)
+        for i in 0 ..< _limitLines.count
         {
             if (_limitLines[i] === line)
             {
-                _limitLines.removeAtIndex(i);
-                return;
+                _limitLines.removeAtIndex(i)
+                return
             }
         }
     }
@@ -88,12 +91,12 @@ public class ChartAxisBase: ChartComponentBase
     /// Removes all LimitLines from the axis.
     public func removeAllLimitLines()
     {
-        _limitLines.removeAll(keepCapacity: false);
+        _limitLines.removeAll(keepCapacity: false)
     }
     
-    /// Returns the LimitLines of this axis.
+    /// - returns: the LimitLines of this axis.
     public var limitLines : [ChartLimitLine]
         {
-            return _limitLines;
+            return _limitLines
     }
 }

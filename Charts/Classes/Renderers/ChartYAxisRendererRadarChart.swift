@@ -12,173 +12,252 @@
 //
 
 import Foundation
+import CoreGraphics
+
+#if !os(OSX)
+    import UIKit
+#endif
+
 
 public class ChartYAxisRendererRadarChart: ChartYAxisRenderer
 {
-    private weak var _chart: RadarChartView!;
+    private weak var chart: RadarChartView?
     
     public init(viewPortHandler: ChartViewPortHandler, yAxis: ChartYAxis, chart: RadarChartView)
     {
-        super.init(viewPortHandler: viewPortHandler, yAxis: yAxis, transformer: nil);
+        super.init(viewPortHandler: viewPortHandler, yAxis: yAxis, transformer: nil)
         
-        _chart = chart;
-    }
- 
-    public override func computeAxis(#yMin: Float, yMax: Float)
-    {
-        computeAxisValues(min: yMin, max: yMax);
+        self.chart = chart
     }
     
-    internal override func computeAxisValues(min yMin: Float, max yMax: Float)
+    public override func computeAxis(yMin yMin: Double, yMax: Double)
     {
-        var labelCount = _yAxis.labelCount;
-        var range = abs(yMax - yMin);
+        computeAxisValues(min: yMin, max: yMax)
+    }
+    
+    public override func computeAxisValues(min yMin: Double, max yMax: Double)
+    {
+        guard let yAxis = yAxis else { return }
+        
+        let labelCount = yAxis.labelCount
+        let range = abs(yMax - yMin)
         
         if (labelCount == 0 || range <= 0)
         {
-            _yAxis.entries = [Float]();
-            return;
+            yAxis.entries = [Double]()
+            return
         }
         
-        var rawInterval = range / Float(labelCount);
-        var interval = ChartUtils.roundToNextSignificant(number: Double(rawInterval));
-        var intervalMagnitude = pow(10.0, round(log10(interval)));
-        var intervalSigDigit = Int(interval / intervalMagnitude);
+        let rawInterval = range / Double(labelCount)
+        var interval = ChartUtils.roundToNextSignificant(number: Double(rawInterval))
+        let intervalMagnitude = pow(10.0, round(log10(interval)))
+        let intervalSigDigit = Int(interval / intervalMagnitude)
         
         if (intervalSigDigit > 5)
         {
             // Use one order of magnitude higher, to avoid intervals like 0.9 or
             // 90
-            interval = floor(10 * intervalMagnitude);
+            interval = floor(10 * intervalMagnitude)
         }
         
-        // if the labels should only show min and max
-        if (_yAxis.isShowOnlyMinMaxEnabled)
+        // force label count
+        if yAxis.isForceLabelsEnabled
         {
-            _yAxis.entries = [Float]();
-            _yAxis.entries.append(yMin);
-            _yAxis.entries.append(yMax);
-        }
-        else
-        {
-            var first = ceil(Double(yMin) / interval) * interval;
-            var last = ChartUtils.nextUp(floor(Double(yMax) / interval) * interval);
+            let step = Double(range) / Double(labelCount - 1)
             
-            var f: Double;
-            var i: Int;
-            var n = 0;
-            for (f = first; f <= last; f += interval)
-            {
-                ++n;
-            }
-            
-            if (isnan(_yAxis.customAxisMax))
-            {
-                n += 1;
-            }
-
-            if (_yAxis.entries.count < n)
+            if yAxis.entries.count < labelCount
             {
                 // Ensure stops contains at least numStops elements.
-                _yAxis.entries = [Float](count: n, repeatedValue: 0.0);
-            }
-
-            for (f = first, i = 0; i < n; f += interval, ++i)
-            {
-                _yAxis.entries[i] = Float(f);
-            }
-        }
-        
-        _yAxis.axisMaximum = _yAxis.entries[_yAxis.entryCount - 1];
-        _yAxis.axisRange = abs(_yAxis.axisMaximum - _yAxis.axisMinimum);
-    }
-    
-    public override func renderAxisLabels(#context: CGContext)
-    {
-        if (!_yAxis.isEnabled || !_yAxis.isDrawLabelsEnabled)
-        {
-            return;
-        }
-        
-        var labelFont = _yAxis.labelFont;
-        var labelTextColor = _yAxis.labelTextColor;
-        
-        var center = _chart.centerOffsets;
-        var factor = _chart.factor;
-        
-        var labelCount = _yAxis.entryCount;
-        
-        var labelLineHeight = _yAxis.labelFont.lineHeight;
-        
-        for (var j = 0; j < labelCount; j++)
-        {
-            if (j == labelCount - 1 && _yAxis.isDrawTopYLabelEntryEnabled == false)
-            {
-                break;
-            }
-            
-            var r = CGFloat(_yAxis.entries[j] - _yAxis.axisMinimum) * factor;
-            
-            var p = ChartUtils.getPosition(center: center, dist: r, angle: _chart.rotationAngle);
-            
-            var label = _yAxis.getFormattedLabel(j);
-            
-            ChartUtils.drawText(context: context, text: label, point: CGPoint(x: p.x + 10.0, y: p.y - labelLineHeight), align: .Left, attributes: [NSFontAttributeName: labelFont, NSForegroundColorAttributeName: labelTextColor]);
-        }
-    }
-    
-    public override func renderLimitLines(#context: CGContext)
-    {
-        var limitLines = _yAxis.limitLines;
-        
-        if (limitLines.count == 0)
-        {
-            return;
-        }
-        
-        var sliceangle = _chart.sliceAngle;
-        
-        // calculate the factor that is needed for transforming the value to pixels
-        var factor = _chart.factor;
-        
-        var center = _chart.centerOffsets;
-        
-        for (var i = 0; i < limitLines.count; i++)
-        {
-            var l = limitLines[i];
-            
-            CGContextSetStrokeColorWithColor(context, l.lineColor.CGColor);
-            CGContextSetLineWidth(context, l.lineWidth);
-            if (l.lineDashLengths != nil)
-            {
-                CGContextSetLineDash(context, l.lineDashPhase, l.lineDashLengths!, l.lineDashLengths!.count);
+                yAxis.entries.removeAll(keepCapacity: true)
             }
             else
             {
-                CGContextSetLineDash(context, 0.0, nil, 0);
+                yAxis.entries = [Double]()
+                yAxis.entries.reserveCapacity(labelCount)
             }
             
-            var r = CGFloat(l.limit - _chart.chartYMin) * factor;
+            var v = yMin
             
-            CGContextBeginPath(context);
-            
-            for (var j = 0, count = _chart.data!.xValCount; j < count; j++)
+            for _ in 0 ..< labelCount
             {
-                var p = ChartUtils.getPosition(center: center, dist: r, angle: sliceangle * CGFloat(j) + _chart.rotationAngle);
+                yAxis.entries.append(v)
+                v += step
+            }
+            
+        }
+        else
+        {
+            // no forced count
+            
+            // clean old values
+            if (yAxis.entries.count > 0)
+            {
+                yAxis.entries.removeAll(keepCapacity: false)
+            }
+            
+            // if the labels should only show min and max
+            if (yAxis.isShowOnlyMinMaxEnabled)
+            {
+                yAxis.entries = [Double]()
+                yAxis.entries.append(yMin)
+                yAxis.entries.append(yMax)
+            }
+            else
+            {
+                let rawCount = Double(yMin) / interval
+                var first = rawCount < 0.0 ? floor(rawCount) * interval : ceil(rawCount) * interval;
+                
+                if (first == 0.0)
+                { // Fix for IEEE negative zero case (Where value == -0.0, and 0.0 == -0.0)
+                    first = 0.0
+                }
+                
+                let last = ChartUtils.nextUp(floor(Double(yMax) / interval) * interval)
+                
+                var n = 0
+                for _ in first.stride(through: last, by: interval)
+                {
+                    n += 1
+                }
+                
+                if (isnan(yAxis.customAxisMax))
+                {
+                    n += 1
+                }
+                
+                if (yAxis.entries.count < n)
+                {
+                    // Ensure stops contains at least numStops elements.
+                    yAxis.entries = [Double](count: n, repeatedValue: 0.0)
+                }
+                
+                var f = first
+                var i = 0
+                while (i < n)
+                {
+                    yAxis.entries[i] = Double(f)
+                    
+                    f += interval
+                    i += 1
+                }
+            }
+        }
+        
+        if yAxis.entries[0] < yMin
+        {
+            // If startAtZero is disabled, and the first label is lower that the axis minimum,
+            // Then adjust the axis minimum
+            yAxis.axisMinimum = yAxis.entries[0]
+        }
+        yAxis.axisMaximum = yAxis.entries[yAxis.entryCount - 1]
+        yAxis.axisRange = abs(yAxis.axisMaximum - yAxis.axisMinimum)
+    }
+    
+    public override func renderAxisLabels(context context: CGContext)
+    {
+        guard let
+            yAxis = yAxis,
+            chart = chart
+            else { return }
+        
+        if (!yAxis.isEnabled || !yAxis.isDrawLabelsEnabled)
+        {
+            return
+        }
+        
+        let labelFont = yAxis.labelFont
+        let labelTextColor = yAxis.labelTextColor
+        
+        let center = chart.centerOffsets
+        let factor = chart.factor
+        
+        let labelCount = yAxis.entryCount
+        
+        let labelLineHeight = yAxis.labelFont.lineHeight
+        
+        for j in 0 ..< labelCount
+        {
+            if (j == labelCount - 1 && yAxis.isDrawTopYLabelEntryEnabled == false)
+            {
+                break
+            }
+            
+            let r = CGFloat(yAxis.entries[j] - yAxis.axisMinimum) * factor
+            
+            let p = ChartUtils.getPosition(center: center, dist: r, angle: chart.rotationAngle)
+            
+            let label = yAxis.getFormattedLabel(j)
+            
+            ChartUtils.drawText(context: context, text: label, point: CGPoint(x: p.x + 10.0, y: p.y - labelLineHeight), align: .Left, attributes: [NSFontAttributeName: labelFont, NSForegroundColorAttributeName: labelTextColor])
+        }
+    }
+    
+    public override func renderLimitLines(context context: CGContext)
+    {
+        guard let
+            yAxis = yAxis,
+            chart = chart
+            else { return }
+        
+        var limitLines = yAxis.limitLines
+        
+        if (limitLines.count == 0)
+        {
+            return
+        }
+        
+        CGContextSaveGState(context)
+        
+        let sliceangle = chart.sliceAngle
+        
+        // calculate the factor that is needed for transforming the value to pixels
+        let factor = chart.factor
+        
+        let center = chart.centerOffsets
+        
+        for i in 0 ..< limitLines.count
+        {
+            let l = limitLines[i]
+            
+            if !l.isEnabled
+            {
+                continue
+            }
+            
+            CGContextSetStrokeColorWithColor(context, l.lineColor.CGColor)
+            CGContextSetLineWidth(context, l.lineWidth)
+            if (l.lineDashLengths != nil)
+            {
+                CGContextSetLineDash(context, l.lineDashPhase, l.lineDashLengths!, l.lineDashLengths!.count)
+            }
+            else
+            {
+                CGContextSetLineDash(context, 0.0, nil, 0)
+            }
+            
+            let r = CGFloat(l.limit - chart.chartYMin) * factor
+            
+            CGContextBeginPath(context)
+            
+            for j in 0 ..< chart.data!.xValCount
+            {
+                let p = ChartUtils.getPosition(center: center, dist: r, angle: sliceangle * CGFloat(j) + chart.rotationAngle)
                 
                 if (j == 0)
                 {
-                    CGContextMoveToPoint(context, p.x, p.y);
+                    CGContextMoveToPoint(context, p.x, p.y)
                 }
                 else
                 {
-                    CGContextAddLineToPoint(context, p.x, p.y);
+                    CGContextAddLineToPoint(context, p.x, p.y)
                 }
             }
             
-            CGContextClosePath(context);
+            CGContextClosePath(context)
             
-            CGContextStrokePath(context);
+            CGContextStrokePath(context)
         }
+        
+        CGContextRestoreGState(context)
     }
 }

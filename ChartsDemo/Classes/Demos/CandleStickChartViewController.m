@@ -35,13 +35,14 @@
     self.options = @[
                      @{@"key": @"toggleValues", @"label": @"Toggle Values"},
                      @{@"key": @"toggleHighlight", @"label": @"Toggle Highlight"},
-                     @{@"key": @"toggleStartZero", @"label": @"Toggle StartZero"},
                      @{@"key": @"animateX", @"label": @"Animate X"},
                      @{@"key": @"animateY", @"label": @"Animate Y"},
                      @{@"key": @"animateXY", @"label": @"Animate XY"},
-                     @{@"key": @"toggleAdjustXLegend", @"label": @"Toggle AdjustXLegend"},
                      @{@"key": @"saveToGallery", @"label": @"Save to Camera Roll"},
                      @{@"key": @"togglePinchZoom", @"label": @"Toggle PinchZoom"},
+                     @{@"key": @"toggleAutoScaleMinMax", @"label": @"Toggle auto scale min/max"},
+                     @{@"key": @"toggleShadowColorSameAsCandle", @"label": @"Toggle shadow same color"},
+                     @{@"key": @"toggleData", @"label": @"Toggle Data"},
                      ];
     
     _chartView.delegate = self;
@@ -55,22 +56,21 @@
     
     ChartXAxis *xAxis = _chartView.xAxis;
     xAxis.labelPosition = XAxisLabelPositionBottom;
-    xAxis.spaceBetweenLabels = 2.f;
+    xAxis.spaceBetweenLabels = 2.0;
     xAxis.drawGridLinesEnabled = NO;
     
     ChartYAxis *leftAxis = _chartView.leftAxis;
     leftAxis.labelCount = 7;
     leftAxis.drawGridLinesEnabled = NO;
     leftAxis.drawAxisLineEnabled = NO;
-    leftAxis.startAtZeroEnabled = NO;
     
     ChartYAxis *rightAxis = _chartView.rightAxis;
     rightAxis.enabled = NO;
     
     _chartView.legend.enabled = NO;
     
-    _sliderX.value = 39.f;
-    _sliderY.value = 100.f;
+    _sliderX.value = 39.0;
+    _sliderY.value = 100.0;
     [self slidersValueChanged:nil];
 }
 
@@ -80,7 +80,18 @@
     // Dispose of any resources that can be recreated.
 }
 
-- (void)setDataCount:(int)count range:(float)range
+- (void)updateChartData
+{
+    if (self.shouldHideData)
+    {
+        _chartView.data = nil;
+        return;
+    }
+    
+    [self setDataCount:(_sliderX.value + 1) range:_sliderY.value];
+}
+
+- (void)setDataCount:(int)count range:(double)range
 {
     NSMutableArray *xVals = [[NSMutableArray alloc] init];
     
@@ -93,12 +104,12 @@
     
     for (int i = 0; i < count; i++)
     {
-        float mult = (range + 1);
-        float val = (float) (arc4random_uniform(40)) + mult;
-        float high =(float) (arc4random_uniform(9)) + 8.f;
-        float low =(float) (arc4random_uniform(9)) + 8.f;
-        float open =(float) (arc4random_uniform(6)) + 1.f;
-        float close =(float) (arc4random_uniform(6)) + 1.f;
+        double mult = (range + 1);
+        double val = (double) (arc4random_uniform(40)) + mult;
+        double high = (double) (arc4random_uniform(9)) + 8.0;
+        double low = (double) (arc4random_uniform(9)) + 8.0;
+        double open = (double) (arc4random_uniform(6)) + 1.0;
+        double close = (double) (arc4random_uniform(6)) + 1.0;
         BOOL even = i % 2 == 0;
         [yVals1 addObject:[[CandleChartDataEntry alloc] initWithXIndex:i shadowH:val + high shadowL:val - low open:even ? val + open : val - open close:even ? val - close : val + close]];
     }
@@ -108,11 +119,12 @@
     [set1 setColor:[UIColor colorWithWhite:80/255.f alpha:1.f]];
     
     set1.shadowColor = UIColor.darkGrayColor;
-    set1.shadowWidth = 0.7f;
+    set1.shadowWidth = 0.7;
     set1.decreasingColor = UIColor.redColor;
-    set1.decreasingFilled = NO;
+    set1.decreasingFilled = YES;
     set1.increasingColor = [UIColor colorWithRed:122/255.f green:242/255.f blue:84/255.f alpha:1.f];
-    set1.increasingFilled = YES;
+    set1.increasingFilled = NO;
+    set1.neutralColor = UIColor.blueColor;
     
     CandleChartData *data = [[CandleChartData alloc] initWithXVals:xVals dataSet:set1];
     
@@ -121,96 +133,18 @@
 
 - (void)optionTapped:(NSString *)key
 {
-    if ([key isEqualToString:@"toggleValues"])
+    if ([key isEqualToString:@"toggleShadowColorSameAsCandle"])
     {
-        for (ChartDataSet *set in _chartView.data.dataSets)
+        for (id<ICandleChartDataSet> set in _chartView.data.dataSets)
         {
-            set.drawValuesEnabled = !set.isDrawValuesEnabled;
+            set.shadowColorSameAsCandle = !set.shadowColorSameAsCandle;
         }
-        
-        [_chartView setNeedsDisplay];
-    }
-    
-    if ([key isEqualToString:@"toggleFilled"])
-    {
-        for (LineChartDataSet *set in _chartView.data.dataSets)
-        {
-            set.drawFilledEnabled = !set.isDrawFilledEnabled;
-        }
-        
-        [_chartView setNeedsDisplay];
-    }
-    
-    if ([key isEqualToString:@"toggleCircles"])
-    {
-        for (LineChartDataSet *set in _chartView.data.dataSets)
-        {
-            set.drawCirclesEnabled = !set.isDrawCirclesEnabled;
-        }
-        
-        [_chartView setNeedsDisplay];
-    }
-    
-    if ([key isEqualToString:@"toggleCubic"])
-    {
-        for (LineChartDataSet *set in _chartView.data.dataSets)
-        {
-            set.drawCubicEnabled = !set.isDrawCubicEnabled;
-        }
-        
-        [_chartView setNeedsDisplay];
-    }
-    
-    if ([key isEqualToString:@"toggleHighlight"])
-    {
-        _chartView.highlightEnabled = !_chartView.isHighlightEnabled;
-        
-        [_chartView setNeedsDisplay];
-    }
-    
-    if ([key isEqualToString:@"toggleStartZero"])
-    {
-        _chartView.leftAxis.startAtZeroEnabled = !_chartView.leftAxis.isStartAtZeroEnabled;
-        _chartView.rightAxis.startAtZeroEnabled = !_chartView.rightAxis.isStartAtZeroEnabled;
         
         [_chartView notifyDataSetChanged];
+        return;
     }
     
-    if ([key isEqualToString:@"animateX"])
-    {
-        [_chartView animateWithXAxisDuration:3.0];
-    }
-    
-    if ([key isEqualToString:@"animateY"])
-    {
-        [_chartView animateWithYAxisDuration:3.0];
-    }
-    
-    if ([key isEqualToString:@"animateXY"])
-    {
-        [_chartView animateWithXAxisDuration:3.0 yAxisDuration:3.0];
-    }
-    
-    if ([key isEqualToString:@"toggleAdjustXLegend"])
-    {
-        ChartXAxis *xLabels = _chartView.xAxis;
-        
-        xLabels.adjustXLabelsEnabled = !xLabels.isAdjustXLabelsEnabled;
-        
-        [_chartView setNeedsDisplay];
-    }
-    
-    if ([key isEqualToString:@"saveToGallery"])
-    {
-        [_chartView saveToCameraRoll];
-    }
-    
-    if ([key isEqualToString:@"togglePinchZoom"])
-    {
-        _chartView.pinchZoomEnabled = !_chartView.isPinchZoomEnabled;
-        
-        [_chartView setNeedsDisplay];
-    }
+    [super handleOption:key forChartView:_chartView];
 }
 
 #pragma mark - Actions
@@ -220,7 +154,7 @@
     _sliderTextX.text = [@((int)_sliderX.value + 1) stringValue];
     _sliderTextY.text = [@((int)_sliderY.value) stringValue];
     
-    [self setDataCount:(_sliderX.value + 1) range:_sliderY.value];
+    [self updateChartData];
 }
 
 #pragma mark - ChartViewDelegate

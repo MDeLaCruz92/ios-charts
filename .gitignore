@@ -16,7 +16,7 @@ DerivedData
 *.hmap
 *.ipa
 *.xcuserstate
-*.xcworkspace
+project.xcworkspace
 
 # CocoaPods
 #
@@ -25,3 +25,7 @@ DerivedData
 # http://guides.cocoapods.org/using/using-cocoapods.html#should-i-ignore-the-pods-directory-in-source-control
 #
 # Pods/
+
+Carthage
+Charts.framework.zip
+ChartsRealm.framework.zip

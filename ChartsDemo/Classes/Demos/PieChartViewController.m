@@ -42,33 +42,19 @@
                      @{@"key": @"animateXY", @"label": @"Animate XY"},
                      @{@"key": @"spin", @"label": @"Spin"},
                      @{@"key": @"drawCenter", @"label": @"Draw CenterText"},
-                     @{@"key": @"saveToGallery", @"label": @"Save to Camera Roll"}
+                     @{@"key": @"saveToGallery", @"label": @"Save to Camera Roll"},
+                     @{@"key": @"toggleData", @"label": @"Toggle Data"},
                      ];
+    
+    [self setupPieChartView:_chartView];
     
     _chartView.delegate = self;
     
-    _chartView.usePercentValuesEnabled = YES;
-    _chartView.holeTransparent = YES;
-    _chartView.centerTextFont = [UIFont fontWithName:@"HelveticaNeue-Light" size:12.f];
-    _chartView.holeRadiusPercent = 0.58f;
-    _chartView.transparentCircleRadiusPercent = 0.61f;
-    _chartView.descriptionText = @"";
-    _chartView.drawCenterTextEnabled = YES;
-    _chartView.drawHoleEnabled = YES;
-    _chartView.rotationAngle = 0.f;
-    _chartView.rotationEnabled = YES;
-    _chartView.centerText = @"iOS Charts\nby Daniel Cohen Gindi";
-    
-    ChartLegend *l = _chartView.legend;
-    l.position = ChartLegendPositionRightOfChart;
-    l.xEntrySpace = 7.f;
-    l.yEntrySpace = 5.f;
-    
-    _sliderX.value = 3.f;
-    _sliderY.value = 100.f;
+    _sliderX.value = 3.0;
+    _sliderY.value = 100.0;
     [self slidersValueChanged:nil];
     
-    [_chartView animateWithXAxisDuration:1.5 yAxisDuration:1.5 easingOption:ChartEasingOptionEaseOutBack];
+    [_chartView animateWithXAxisDuration:1.4 easingOption:ChartEasingOptionEaseOutBack];
 }
 
 - (void)didReceiveMemoryWarning
@@ -77,9 +63,20 @@
     // Dispose of any resources that can be recreated.
 }
 
-- (void)setDataCount:(int)count range:(float)range
+- (void)updateChartData
 {
-    float mult = range;
+    if (self.shouldHideData)
+    {
+        _chartView.data = nil;
+        return;
+    }
+    
+    [self setDataCount:(_sliderX.value + 1) range:_sliderY.value];
+}
+
+- (void)setDataCount:(int)count range:(double)range
+{
+    double mult = range;
     
     NSMutableArray *yVals1 = [[NSMutableArray alloc] init];
     
@@ -97,7 +94,7 @@
     }
     
     PieChartDataSet *dataSet = [[PieChartDataSet alloc] initWithYVals:yVals1 label:@"Election Results"];
-    dataSet.sliceSpace = 3.f;
+    dataSet.sliceSpace = 2.0;
     
     // add a lot of colors
     
@@ -128,21 +125,12 @@
 
 - (void)optionTapped:(NSString *)key
 {
-    if ([key isEqualToString:@"toggleValues"])
-    {
-        for (ChartDataSet *set in _chartView.data.dataSets)
-        {
-            set.drawValuesEnabled = !set.isDrawValuesEnabled;
-        }
-        
-        [_chartView setNeedsDisplay];
-    }
-    
     if ([key isEqualToString:@"toggleXValues"])
     {
         _chartView.drawSliceTextEnabled = !_chartView.isDrawSliceTextEnabled;
         
         [_chartView setNeedsDisplay];
+        return;
     }
     
     if ([key isEqualToString:@"togglePercent"])
@@ -150,6 +138,7 @@
         _chartView.usePercentValuesEnabled = !_chartView.isUsePercentValuesEnabled;
         
         [_chartView setNeedsDisplay];
+        return;
     }
     
     if ([key isEqualToString:@"toggleHole"])
@@ -157,6 +146,7 @@
         _chartView.drawHoleEnabled = !_chartView.isDrawHoleEnabled;
         
         [_chartView setNeedsDisplay];
+        return;
     }
     
     if ([key isEqualToString:@"drawCenter"])
@@ -164,32 +154,34 @@
         _chartView.drawCenterTextEnabled = !_chartView.isDrawCenterTextEnabled;
         
         [_chartView setNeedsDisplay];
+        return;
     }
     
     if ([key isEqualToString:@"animateX"])
     {
-        [_chartView animateWithXAxisDuration:3.0];
+        [_chartView animateWithXAxisDuration:1.4];
+        return;
     }
     
     if ([key isEqualToString:@"animateY"])
     {
-        [_chartView animateWithYAxisDuration:3.0];
+        [_chartView animateWithYAxisDuration:1.4];
+        return;
     }
     
     if ([key isEqualToString:@"animateXY"])
     {
-        [_chartView animateWithXAxisDuration:3.0 yAxisDuration:3.0];
+        [_chartView animateWithXAxisDuration:1.4 yAxisDuration:1.4];
+        return;
     }
     
     if ([key isEqualToString:@"spin"])
     {
         [_chartView spinWithDuration:2.0 fromAngle:_chartView.rotationAngle toAngle:_chartView.rotationAngle + 360.f];
+        return;
     }
     
-    if ([key isEqualToString:@"saveToGallery"])
-    {
-        [_chartView saveToCameraRoll];
-    }
+    [super handleOption:key forChartView:_chartView];
 }
 
 #pragma mark - Actions
@@ -199,7 +191,7 @@
     _sliderTextX.text = [@((int)_sliderX.value + 1) stringValue];
     _sliderTextY.text = [@((int)_sliderY.value) stringValue];
     
-    [self setDataCount:(_sliderX.value + 1) range:_sliderY.value];
+    [self updateChartData];
 }
 
 #pragma mark - ChartViewDelegate

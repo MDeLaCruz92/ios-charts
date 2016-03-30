@@ -39,10 +39,10 @@
                      @{@"key": @"animateX", @"label": @"Animate X"},
                      @{@"key": @"animateY", @"label": @"Animate Y"},
                      @{@"key": @"animateXY", @"label": @"Animate XY"},
-                     @{@"key": @"toggleStartZero", @"label": @"Toggle StartZero"},
-                     @{@"key": @"toggleAdjustXLegend", @"label": @"Toggle AdjustXLegend"},
                      @{@"key": @"saveToGallery", @"label": @"Save to Camera Roll"},
                      @{@"key": @"togglePinchZoom", @"label": @"Toggle PinchZoom"},
+                     @{@"key": @"toggleAutoScaleMinMax", @"label": @"Toggle auto scale min/max"},
+                     @{@"key": @"toggleData", @"label": @"Toggle Data"},
                      ];
     
     _chartView.delegate = self;
@@ -70,14 +70,12 @@
     leftAxis.valueFormatter = [[NSNumberFormatter alloc] init];
     leftAxis.valueFormatter.maximumFractionDigits = 1;
     leftAxis.drawGridLinesEnabled = NO;
-    leftAxis.spaceTop = 0.25f;
+    leftAxis.spaceTop = 0.25;
     
     _chartView.rightAxis.enabled = NO;
-    _chartView.valueFormatter = [[NSNumberFormatter alloc] init];
-    _chartView.valueFormatter.maximumFractionDigits = 1;
     
-    _sliderX.value = 9.f;
-    _sliderY.value = 100.f;
+    _sliderX.value = 9.0;
+    _sliderY.value = 100.0;
     [self slidersValueChanged:nil];
 }
 
@@ -87,7 +85,18 @@
     // Dispose of any resources that can be recreated.
 }
 
-- (void)setDataCount:(int)count range:(float)range
+- (void)updateChartData
+{
+    if (self.shouldHideData)
+    {
+        _chartView.data = nil;
+        return;
+    }
+    
+    [self setDataCount:(_sliderX.value + 1) range:_sliderY.value];
+}
+
+- (void)setDataCount:(int)count range:(double)range
 {
     NSMutableArray *xVals = [[NSMutableArray alloc] init];
     
@@ -100,17 +109,17 @@
     NSMutableArray *yVals2 = [[NSMutableArray alloc] init];
     NSMutableArray *yVals3 = [[NSMutableArray alloc] init];
     
-    float mult = range * 1000.f;
+    double mult = range * 1000.f;
     
     for (int i = 0; i < count; i++)
     {
-        float val = (float) (arc4random_uniform(mult) + 3.f);
+        double val = (double) (arc4random_uniform(mult) + 3.0);
         [yVals1 addObject:[[BarChartDataEntry alloc] initWithValue:val xIndex:i]];
         
-        val = (float) (arc4random_uniform(mult) + 3.f);
+        val = (double) (arc4random_uniform(mult) + 3.0);
         [yVals2 addObject:[[BarChartDataEntry alloc] initWithValue:val xIndex:i]];
         
-        val = (float) (arc4random_uniform(mult) + 3.f);
+        val = (double) (arc4random_uniform(mult) + 3.0);
         [yVals3 addObject:[[BarChartDataEntry alloc] initWithValue:val xIndex:i]];
     }
     
@@ -127,7 +136,7 @@
     [dataSets addObject:set3];
     
     BarChartData *data = [[BarChartData alloc] initWithXVals:xVals dataSets:dataSets];
-    data.groupSpace = 0.8f;
+    data.groupSpace = 0.8;
     [data setValueFont:[UIFont fontWithName:@"HelveticaNeue-Light" size:10.f]];
     
     _chartView.data = data;
@@ -135,73 +144,7 @@
 
 - (void)optionTapped:(NSString *)key
 {
-    if ([key isEqualToString:@"toggleValues"])
-    {
-        for (ChartDataSet *set in _chartView.data.dataSets)
-        {
-            set.drawValuesEnabled = !set.isDrawValuesEnabled;
-        }
-        
-        [_chartView setNeedsDisplay];
-    }
-    
-    if ([key isEqualToString:@"toggleHighlight"])
-    {
-        _chartView.highlightEnabled = !_chartView.isHighlightEnabled;
-        
-        [_chartView setNeedsDisplay];
-    }
-    
-    if ([key isEqualToString:@"toggleHighlightArrow"])
-    {
-        _chartView.drawHighlightArrowEnabled = !_chartView.isDrawHighlightArrowEnabled;
-        
-        [_chartView setNeedsDisplay];
-    }
-    
-    if ([key isEqualToString:@"toggleStartZero"])
-    {
-        _chartView.leftAxis.startAtZeroEnabled = !_chartView.leftAxis.isStartAtZeroEnabled;
-        _chartView.rightAxis.startAtZeroEnabled = !_chartView.rightAxis.isStartAtZeroEnabled;
-        
-        [_chartView notifyDataSetChanged];
-    }
-    
-    if ([key isEqualToString:@"animateX"])
-    {
-        [_chartView animateWithXAxisDuration:3.0];
-    }
-    
-    if ([key isEqualToString:@"animateY"])
-    {
-        [_chartView animateWithYAxisDuration:3.0];
-    }
-    
-    if ([key isEqualToString:@"animateXY"])
-    {
-        [_chartView animateWithXAxisDuration:3.0 yAxisDuration:3.0];
-    }
-    
-    if ([key isEqualToString:@"toggleAdjustXLegend"])
-    {
-        ChartXAxis *xLabels = _chartView.xAxis;
-        
-        xLabels.adjustXLabelsEnabled = !xLabels.isAdjustXLabelsEnabled;
-        
-        [_chartView setNeedsDisplay];
-    }
-    
-    if ([key isEqualToString:@"saveToGallery"])
-    {
-        [_chartView saveToCameraRoll];
-    }
-    
-    if ([key isEqualToString:@"togglePinchZoom"])
-    {
-        _chartView.pinchZoomEnabled = !_chartView.isPinchZoomEnabled;
-        
-        [_chartView setNeedsDisplay];
-    }
+    [super handleOption:key forChartView:_chartView];
 }
 
 #pragma mark - Actions
@@ -211,7 +154,7 @@
     _sliderTextX.text = [@((int)_sliderX.value + 1) stringValue];
     _sliderTextY.text = [@((int)_sliderY.value) stringValue];
     
-    [self setDataCount:(_sliderX.value + 1) range:_sliderY.value];
+    [self updateChartData];
 }
 
 #pragma mark - ChartViewDelegate

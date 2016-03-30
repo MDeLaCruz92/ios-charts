@@ -12,132 +12,154 @@
 //
 
 import Foundation
+import CoreGraphics
+
+#if !os(OSX)
+    import UIKit
+#endif
+
 
 public class ChartXAxisRendererBarChart: ChartXAxisRenderer
 {
-    internal weak var _chart: BarChartView!;
+    public weak var chart: BarChartView?
     
     public init(viewPortHandler: ChartViewPortHandler, xAxis: ChartXAxis, transformer: ChartTransformer!, chart: BarChartView)
     {
-        super.init(viewPortHandler: viewPortHandler, xAxis: xAxis, transformer: transformer);
+        super.init(viewPortHandler: viewPortHandler, xAxis: xAxis, transformer: transformer)
         
-        self._chart = chart;
+        self.chart = chart
     }
     
     /// draws the x-labels on the specified y-position
-    internal override func drawLabels(#context: CGContext, pos: CGFloat)
+    public override func drawLabels(context context: CGContext, pos: CGFloat, anchor: CGPoint)
     {
-        if (_chart.data === nil)
+        guard let
+            xAxis = xAxis,
+            barData = chart?.data as? BarChartData
+            else { return }
+        
+        let paraStyle = NSParagraphStyle.defaultParagraphStyle().mutableCopy() as! NSMutableParagraphStyle
+        paraStyle.alignment = .Center
+        
+        let labelAttrs = [NSFontAttributeName: xAxis.labelFont,
+            NSForegroundColorAttributeName: xAxis.labelTextColor,
+            NSParagraphStyleAttributeName: paraStyle]
+        let labelRotationAngleRadians = xAxis.labelRotationAngle * ChartUtils.Math.FDEG2RAD
+        
+        let step = barData.dataSetCount
+        
+        let valueToPixelMatrix = transformer.valueToPixelMatrix
+        
+        var position = CGPoint(x: 0.0, y: 0.0)
+        
+        var labelMaxSize = CGSize()
+        
+        if (xAxis.isWordWrapEnabled)
         {
-            return;
+            labelMaxSize.width = xAxis.wordWrapWidthPercent * valueToPixelMatrix.a
         }
         
-        var labelFont = _xAxis.labelFont;
-        var labelTextColor = _xAxis.labelTextColor;
-        
-        var barData = _chart.data as! BarChartData;
-        var step = barData.dataSetCount;
-        
-        var trans = transformer.valueToPixelMatrix;
-        
-        var position = CGPoint(x: 0.0, y: 0.0);
-        
-        var div = CGFloat(step) + (step > 1 ? barData.groupSpace : 0.0);
-        var min = Int(CGFloat(_minX) / div);
-        var max = Int(CGFloat(_maxX) / div);
-        
-        for (var i = min; i <= max; i += _xAxis.axisLabelModulus)
+        for i in self.minX.stride(to: min(self.maxX + 1, xAxis.values.count), by: xAxis.axisLabelModulus)
         {
-            position.x = CGFloat(i * step) + CGFloat(i) * barData.groupSpace + barData.groupSpace / 2.0;
-            position.y = 0.0;
+            let label = i >= 0 && i < xAxis.values.count ? xAxis.values[i] : nil
+            if (label == nil)
+            {
+                continue
+            }
+            
+            position.x = CGFloat(i * step) + CGFloat(i) * barData.groupSpace + barData.groupSpace / 2.0
+            position.y = 0.0
             
             // consider groups (center label for each group)
             if (step > 1)
             {
-                position.x += (CGFloat(step) - 1.0) / 2.0;
+                position.x += (CGFloat(step) - 1.0) / 2.0
             }
             
-            position = CGPointApplyAffineTransform(position, trans);
+            position = CGPointApplyAffineTransform(position, valueToPixelMatrix)
             
-            if (viewPortHandler.isInBoundsX(position.x) && i >= 0 && i < _xAxis.values.count)
+            if (viewPortHandler.isInBoundsX(position.x))
             {
-                var label = _xAxis.values[i];
-                var labelns = label as NSString;
-                
-                if (_xAxis.isAvoidFirstLastClippingEnabled)
+                if (xAxis.isAvoidFirstLastClippingEnabled)
                 {
                     // avoid clipping of the last
-                    if (i == _xAxis.values.count - 1)
+                    if (i == xAxis.values.count - 1)
                     {
-                        var width = label.sizeWithAttributes([NSFontAttributeName: _xAxis.labelFont]).width;
+                        let width = label!.sizeWithAttributes(labelAttrs).width
                         
-                        if (width > viewPortHandler.offsetRight * 2.0
-                            && position.x + width > viewPortHandler.chartWidth)
+                        if (position.x + width / 2.0 > viewPortHandler.contentRight)
                         {
-                            position.x -= width / 2.0;
+                            position.x = viewPortHandler.contentRight - (width / 2.0)
                         }
                     }
                     else if (i == 0)
                     { // avoid clipping of the first
-                        var width = label.sizeWithAttributes([NSFontAttributeName: _xAxis.labelFont]).width;
-                        position.x += width / 2.0;
+                        let width = label!.sizeWithAttributes(labelAttrs).width
+                        
+                        if (position.x - width / 2.0 < viewPortHandler.contentLeft)
+                        {
+                            position.x = viewPortHandler.contentLeft + (width / 2.0)
+                        }
                     }
                 }
                 
-                ChartUtils.drawText(context: context, text: label, point: CGPoint(x: position.x, y: pos), align: .Center, attributes: [NSFontAttributeName: labelFont, NSForegroundColorAttributeName: labelTextColor]);
+                drawLabel(context: context, label: label!, xIndex: i, x: position.x, y: pos, attributes: labelAttrs, constrainedToSize: labelMaxSize, anchor: anchor, angleRadians: labelRotationAngleRadians)
             }
         }
     }
     
-    private var _gridLineSegmentsBuffer = [CGPoint](count: 2, repeatedValue: CGPoint());
+    private var _gridLineSegmentsBuffer = [CGPoint](count: 2, repeatedValue: CGPoint())
     
-    public override func renderGridLines(#context: CGContext)
+    public override func renderGridLines(context context: CGContext)
     {
-        if (!_xAxis.isDrawGridLinesEnabled || !_xAxis.isEnabled)
+        guard let
+            xAxis = xAxis,
+            barData = chart?.data as? BarChartData
+            else { return }
+        
+        if (!xAxis.isDrawGridLinesEnabled || !xAxis.isEnabled)
         {
-            return;
+            return
         }
         
-        var barData = _chart.data as! BarChartData;
-        var step = barData.dataSetCount;
+        let step = barData.dataSetCount
         
-        CGContextSaveGState(context);
+        CGContextSaveGState(context)
         
-        CGContextSetStrokeColorWithColor(context, _xAxis.gridColor.CGColor);
-        CGContextSetLineWidth(context, _xAxis.gridLineWidth);
-        if (_xAxis.gridLineDashLengths != nil)
+        CGContextSetShouldAntialias(context, xAxis.gridAntialiasEnabled)
+        CGContextSetStrokeColorWithColor(context, xAxis.gridColor.CGColor)
+        CGContextSetLineWidth(context, xAxis.gridLineWidth)
+        CGContextSetLineCap(context, xAxis.gridLineCap)
+        
+        if (xAxis.gridLineDashLengths != nil)
         {
-            CGContextSetLineDash(context, _xAxis.gridLineDashPhase, _xAxis.gridLineDashLengths, _xAxis.gridLineDashLengths.count);
+            CGContextSetLineDash(context, xAxis.gridLineDashPhase, xAxis.gridLineDashLengths, xAxis.gridLineDashLengths.count)
         }
         else
         {
-            CGContextSetLineDash(context, 0.0, nil, 0);
+            CGContextSetLineDash(context, 0.0, nil, 0)
         }
         
-        var trans = transformer.valueToPixelMatrix;
+        let valueToPixelMatrix = transformer.valueToPixelMatrix
         
-        var position = CGPoint(x: 0.0, y: 0.0);
+        var position = CGPoint(x: 0.0, y: 0.0)
         
-        var div = CGFloat(step) + (step > 1 ? barData.groupSpace : 0.0);
-        var min = Int(CGFloat(_minX) / div);
-        var max = Int(CGFloat(_maxX) / div);
-        
-        for (var i = min; i <= max; i += _xAxis.axisLabelModulus)
+        for i in self.minX.stride(to: self.maxX, by: xAxis.axisLabelModulus)
         {
-            position.x = CGFloat(i * step) + CGFloat(i) * barData.groupSpace - 0.5;
-            position.y = 0.0;
-            position = CGPointApplyAffineTransform(position, trans);
+            position.x = CGFloat(i * step) + CGFloat(i) * barData.groupSpace - 0.5
+            position.y = 0.0
+            position = CGPointApplyAffineTransform(position, valueToPixelMatrix)
             
             if (viewPortHandler.isInBoundsX(position.x))
             {
-                _gridLineSegmentsBuffer[0].x = position.x;
-                _gridLineSegmentsBuffer[0].y = viewPortHandler.contentTop;
-                _gridLineSegmentsBuffer[1].x = position.x;
-                _gridLineSegmentsBuffer[1].y = viewPortHandler.contentBottom;
-                CGContextStrokeLineSegments(context, _gridLineSegmentsBuffer, 2);
+                _gridLineSegmentsBuffer[0].x = position.x
+                _gridLineSegmentsBuffer[0].y = viewPortHandler.contentTop
+                _gridLineSegmentsBuffer[1].x = position.x
+                _gridLineSegmentsBuffer[1].y = viewPortHandler.contentBottom
+                CGContextStrokeLineSegments(context, _gridLineSegmentsBuffer, 2)
             }
         }
         
-        CGContextRestoreGState(context);
+        CGContextRestoreGState(context)
     }
 }

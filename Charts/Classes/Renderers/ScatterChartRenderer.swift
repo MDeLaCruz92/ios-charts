@@ -12,287 +12,395 @@
 //
 
 import Foundation
+import CoreGraphics
 
-@objc
-public protocol ScatterChartRendererDelegate
-{
-    func scatterChartRendererData(renderer: ScatterChartRenderer) -> ScatterChartData!;
-    func scatterChartRenderer(renderer: ScatterChartRenderer, transformerForAxis which: ChartYAxis.AxisDependency) -> ChartTransformer!;
-    func scatterChartDefaultRendererValueFormatter(renderer: ScatterChartRenderer) -> NSNumberFormatter!;
-    func scatterChartRendererChartYMax(renderer: ScatterChartRenderer) -> Float;
-    func scatterChartRendererChartYMin(renderer: ScatterChartRenderer) -> Float;
-    func scatterChartRendererChartXMax(renderer: ScatterChartRenderer) -> Float;
-    func scatterChartRendererChartXMin(renderer: ScatterChartRenderer) -> Float;
-    func scatterChartRendererMaxVisibleValueCount(renderer: ScatterChartRenderer) -> Int;
-}
+#if !os(OSX)
+    import UIKit
+#endif
 
-public class ScatterChartRenderer: ChartDataRendererBase
+
+public class ScatterChartRenderer: LineScatterCandleRadarChartRenderer
 {
-    public weak var delegate: ScatterChartRendererDelegate?;
+    public weak var dataProvider: ScatterChartDataProvider?
     
-    public init(delegate: ScatterChartRendererDelegate?, animator: ChartAnimator?, viewPortHandler: ChartViewPortHandler)
+    public init(dataProvider: ScatterChartDataProvider?, animator: ChartAnimator?, viewPortHandler: ChartViewPortHandler)
     {
-        super.init(animator: animator, viewPortHandler: viewPortHandler);
+        super.init(animator: animator, viewPortHandler: viewPortHandler)
         
-        self.delegate = delegate;
+        self.dataProvider = dataProvider
     }
     
-    public override func drawData(#context: CGContext)
+    public override func drawData(context context: CGContext)
     {
-        var scatterData = delegate!.scatterChartRendererData(self);
+        guard let scatterData = dataProvider?.scatterData else { return }
         
-        if (scatterData === nil)
+        for i in 0 ..< scatterData.dataSetCount
         {
-            return;
-        }
-        
-        for (var i = 0; i < scatterData.dataSetCount; i++)
-        {
-            var set = scatterData.getDataSetByIndex(i);
+            guard let set = scatterData.getDataSetByIndex(i) else { continue }
             
-            if (set !== nil && set!.isVisible)
+            if set.isVisible
             {
-                drawDataSet(context: context, dataSet: set as! ScatterChartDataSet);
+                if !(set is IScatterChartDataSet)
+                {
+                    fatalError("Datasets for ScatterChartRenderer must conform to IScatterChartDataSet")
+                }
+                
+                drawDataSet(context: context, dataSet: set as! IScatterChartDataSet)
             }
         }
     }
     
-    private var _lineSegments = [CGPoint](count: 2, repeatedValue: CGPoint());
+    private var _lineSegments = [CGPoint](count: 2, repeatedValue: CGPoint())
     
-    internal func drawDataSet(#context: CGContext, dataSet: ScatterChartDataSet)
+    public func drawDataSet(context context: CGContext, dataSet: IScatterChartDataSet)
     {
-        var trans = delegate!.scatterChartRenderer(self, transformerForAxis: dataSet.axisDependency);
-        calcXBounds(trans);
+        guard let
+            dataProvider = dataProvider,
+            animator = animator
+            else { return }
         
-        var phaseX = _animator.phaseX;
-        var phaseY = _animator.phaseY;
+        let trans = dataProvider.getTransformer(dataSet.axisDependency)
         
-        var entries = dataSet.yVals;
+        let phaseY = animator.phaseY
         
-        var shapeSize = dataSet.scatterShapeSize;
-        var shapeHalf = shapeSize / 2.0;
+        let entryCount = dataSet.entryCount
         
-        var point = CGPoint();
+        let shapeSize = dataSet.scatterShapeSize
+        let shapeHalf = shapeSize / 2.0
+        let shapeHoleSizeHalf = dataSet.scatterShapeHoleRadius
+        let shapeHoleSize = shapeHoleSizeHalf * 2.0
+        let shapeHoleColor = dataSet.scatterShapeHoleColor
+        let shapeStrokeSize = (shapeSize - shapeHoleSize) / 2.0
+        let shapeStrokeSizeHalf = shapeStrokeSize / 2.0
         
-        var valueToPixelMatrix = trans.valueToPixelMatrix;
+        var point = CGPoint()
         
-        var shape = dataSet.scatterShape;
+        let valueToPixelMatrix = trans.valueToPixelMatrix
         
-        CGContextSaveGState(context);
+        let shape = dataSet.scatterShape
         
-        for (var j = 0, count = Int(min(ceil(CGFloat(entries.count) * _animator.phaseX), CGFloat(entries.count))); j < count; j++)
+        CGContextSaveGState(context)
+        
+        for j in 0 ..< Int(min(ceil(CGFloat(entryCount) * animator.phaseX), CGFloat(entryCount)))
         {
-            var e = entries[j];
-            point.x = CGFloat(e.xIndex);
-            point.y = CGFloat(e.value) * phaseY;
+            guard let e = dataSet.entryForIndex(j) else { continue }
+            
+            point.x = CGFloat(e.xIndex)
+            point.y = CGFloat(e.value) * phaseY
             point = CGPointApplyAffineTransform(point, valueToPixelMatrix);            
             
             if (!viewPortHandler.isInBoundsRight(point.x))
             {
-                break;
+                break
             }
             
             if (!viewPortHandler.isInBoundsLeft(point.x) || !viewPortHandler.isInBoundsY(point.y))
             {
-                continue;
+                continue
             }
             
             if (shape == .Square)
             {
-                CGContextSetFillColorWithColor(context, dataSet.colorAt(j).CGColor);
-                var rect = CGRect();
-                rect.origin.x = point.x - shapeHalf;
-                rect.origin.y = point.y - shapeHalf;
-                rect.size.width = shapeSize;
-                rect.size.height = shapeSize;
-                CGContextFillRect(context, rect);
+                if shapeHoleSize > 0.0
+                {
+                    CGContextSetStrokeColorWithColor(context, dataSet.colorAt(j).CGColor)
+                    CGContextSetLineWidth(context, shapeStrokeSize)
+                    var rect = CGRect()
+                    rect.origin.x = point.x - shapeHoleSizeHalf - shapeStrokeSizeHalf
+                    rect.origin.y = point.y - shapeHoleSizeHalf - shapeStrokeSizeHalf
+                    rect.size.width = shapeHoleSize + shapeStrokeSize
+                    rect.size.height = shapeHoleSize + shapeStrokeSize
+                    CGContextStrokeRect(context, rect)
+                    
+                    if let shapeHoleColor = shapeHoleColor
+                    {
+                        CGContextSetFillColorWithColor(context, shapeHoleColor.CGColor)
+                        rect.origin.x = point.x - shapeHoleSizeHalf
+                        rect.origin.y = point.y - shapeHoleSizeHalf
+                        rect.size.width = shapeHoleSize
+                        rect.size.height = shapeHoleSize
+                        CGContextFillRect(context, rect)
+                    }
+                }
+                else
+                {
+                    CGContextSetFillColorWithColor(context, dataSet.colorAt(j).CGColor)
+                    var rect = CGRect()
+                    rect.origin.x = point.x - shapeHalf
+                    rect.origin.y = point.y - shapeHalf
+                    rect.size.width = shapeSize
+                    rect.size.height = shapeSize
+                    CGContextFillRect(context, rect)
+                }
             }
             else if (shape == .Circle)
             {
-                CGContextSetFillColorWithColor(context, dataSet.colorAt(j).CGColor);
-                var rect = CGRect();
-                rect.origin.x = point.x - shapeHalf;
-                rect.origin.y = point.y - shapeHalf;
-                rect.size.width = shapeSize;
-                rect.size.height = shapeSize;
-                CGContextFillEllipseInRect(context, rect);
-            }
-            else if (shape == .Cross)
-            {
-                CGContextSetStrokeColorWithColor(context, dataSet.colorAt(j).CGColor);
-                _lineSegments[0].x = point.x - shapeHalf;
-                _lineSegments[0].y = point.y;
-                _lineSegments[1].x = point.x + shapeHalf;
-                _lineSegments[1].y = point.y;
-                CGContextStrokeLineSegments(context, _lineSegments, 2);
-                
-                _lineSegments[0].x = point.x;
-                _lineSegments[0].y = point.y - shapeHalf;
-                _lineSegments[1].x = point.x;
-                _lineSegments[1].y = point.y + shapeHalf;
-                CGContextStrokeLineSegments(context, _lineSegments, 2);
+                if shapeHoleSize > 0.0
+                {
+                    CGContextSetStrokeColorWithColor(context, dataSet.colorAt(j).CGColor)
+                    CGContextSetLineWidth(context, shapeStrokeSize)
+                    var rect = CGRect()
+                    rect.origin.x = point.x - shapeHoleSizeHalf - shapeStrokeSizeHalf
+                    rect.origin.y = point.y - shapeHoleSizeHalf - shapeStrokeSizeHalf
+                    rect.size.width = shapeHoleSize + shapeStrokeSize
+                    rect.size.height = shapeHoleSize + shapeStrokeSize
+                    CGContextStrokeEllipseInRect(context, rect)
+                    
+                    if let shapeHoleColor = shapeHoleColor
+                    {
+                        CGContextSetFillColorWithColor(context, shapeHoleColor.CGColor)
+                        rect.origin.x = point.x - shapeHoleSizeHalf
+                        rect.origin.y = point.y - shapeHoleSizeHalf
+                        rect.size.width = shapeHoleSize
+                        rect.size.height = shapeHoleSize
+                        CGContextFillEllipseInRect(context, rect)
+                    }
+                }
+                else
+                {
+                    CGContextSetFillColorWithColor(context, dataSet.colorAt(j).CGColor)
+                    var rect = CGRect()
+                    rect.origin.x = point.x - shapeHalf
+                    rect.origin.y = point.y - shapeHalf
+                    rect.size.width = shapeSize
+                    rect.size.height = shapeSize
+                    CGContextFillEllipseInRect(context, rect)
+                }
             }
             else if (shape == .Triangle)
             {
-                CGContextSetFillColorWithColor(context, dataSet.colorAt(j).CGColor);
+                CGContextSetFillColorWithColor(context, dataSet.colorAt(j).CGColor)
                 
                 // create a triangle path
-                CGContextBeginPath(context);
-                CGContextMoveToPoint(context, point.x, point.y - shapeHalf);
-                CGContextAddLineToPoint(context, point.x + shapeHalf, point.y + shapeHalf);
-                CGContextAddLineToPoint(context, point.x - shapeHalf, point.y + shapeHalf);
-                CGContextClosePath(context);
+                CGContextBeginPath(context)
+                CGContextMoveToPoint(context, point.x, point.y - shapeHalf)
+                CGContextAddLineToPoint(context, point.x + shapeHalf, point.y + shapeHalf)
+                CGContextAddLineToPoint(context, point.x - shapeHalf, point.y + shapeHalf)
                 
-                CGContextFillPath(context);
+                if shapeHoleSize > 0.0
+                {
+                    CGContextAddLineToPoint(context, point.x, point.y - shapeHalf)
+                    
+                    CGContextMoveToPoint(context, point.x - shapeHalf + shapeStrokeSize, point.y + shapeHalf - shapeStrokeSize)
+                    CGContextAddLineToPoint(context, point.x + shapeHalf - shapeStrokeSize, point.y + shapeHalf - shapeStrokeSize)
+                    CGContextAddLineToPoint(context, point.x, point.y - shapeHalf + shapeStrokeSize)
+                    CGContextAddLineToPoint(context, point.x - shapeHalf + shapeStrokeSize, point.y + shapeHalf - shapeStrokeSize)
+                }
+                
+                CGContextClosePath(context)
+                
+                CGContextFillPath(context)
+                
+                if shapeHoleSize > 0.0 && shapeHoleColor != nil
+                {
+                    CGContextSetFillColorWithColor(context, shapeHoleColor!.CGColor)
+                    
+                    // create a triangle path
+                    CGContextBeginPath(context)
+                    CGContextMoveToPoint(context, point.x, point.y - shapeHalf + shapeStrokeSize)
+                    CGContextAddLineToPoint(context, point.x + shapeHalf - shapeStrokeSize, point.y + shapeHalf - shapeStrokeSize)
+                    CGContextAddLineToPoint(context, point.x - shapeHalf + shapeStrokeSize, point.y + shapeHalf - shapeStrokeSize)
+                    CGContextClosePath(context)
+                    
+                    CGContextFillPath(context)
+                }
+            }
+            else if (shape == .Cross)
+            {
+                CGContextSetStrokeColorWithColor(context, dataSet.colorAt(j).CGColor)
+                _lineSegments[0].x = point.x - shapeHalf
+                _lineSegments[0].y = point.y
+                _lineSegments[1].x = point.x + shapeHalf
+                _lineSegments[1].y = point.y
+                CGContextStrokeLineSegments(context, _lineSegments, 2)
+                
+                _lineSegments[0].x = point.x
+                _lineSegments[0].y = point.y - shapeHalf
+                _lineSegments[1].x = point.x
+                _lineSegments[1].y = point.y + shapeHalf
+                CGContextStrokeLineSegments(context, _lineSegments, 2)
+            }
+            else if (shape == .X)
+            {
+                CGContextSetStrokeColorWithColor(context, dataSet.colorAt(j).CGColor)
+                _lineSegments[0].x = point.x - shapeHalf
+                _lineSegments[0].y = point.y - shapeHalf
+                _lineSegments[1].x = point.x + shapeHalf
+                _lineSegments[1].y = point.y + shapeHalf
+                CGContextStrokeLineSegments(context, _lineSegments, 2)
+                
+                _lineSegments[0].x = point.x + shapeHalf
+                _lineSegments[0].y = point.y - shapeHalf
+                _lineSegments[1].x = point.x - shapeHalf
+                _lineSegments[1].y = point.y + shapeHalf
+                CGContextStrokeLineSegments(context, _lineSegments, 2)
             }
             else if (shape == .Custom)
             {
-                CGContextSetFillColorWithColor(context, dataSet.colorAt(j).CGColor);
+                CGContextSetFillColorWithColor(context, dataSet.colorAt(j).CGColor)
                 
-                var customShape = dataSet.customScatterShape
+                let customShape = dataSet.customScatterShape
                 
-                if (customShape === nil)
+                if customShape == nil
                 {
-                    return;
+                    return
                 }
                 
                 // transform the provided custom path
-                CGContextSaveGState(context);
-                CGContextTranslateCTM(context, -point.x, -point.y);
+                CGContextSaveGState(context)
+                CGContextTranslateCTM(context, point.x, point.y)
                 
-                CGContextBeginPath(context);
-                CGContextAddPath(context, customShape);
-                CGContextFillPath(context);
+                CGContextBeginPath(context)
+                CGContextAddPath(context, customShape)
+                CGContextFillPath(context)
                 
-                CGContextRestoreGState(context);
+                CGContextRestoreGState(context)
             }
         }
         
-        CGContextRestoreGState(context);
+        CGContextRestoreGState(context)
     }
     
-    public override func drawValues(#context: CGContext)
+    public override func drawValues(context context: CGContext)
     {
-        var scatterData = delegate!.scatterChartRendererData(self);
-        if (scatterData === nil)
-        {
-            return;
-        }
-        
-        var defaultValueFormatter = delegate!.scatterChartDefaultRendererValueFormatter(self);
+        guard let
+            dataProvider = dataProvider,
+            scatterData = dataProvider.scatterData,
+            animator = animator
+            else { return }
         
         // if values are drawn
-        if (scatterData.yValCount < Int(ceil(CGFloat(delegate!.scatterChartRendererMaxVisibleValueCount(self)) * viewPortHandler.scaleX)))
+        if (scatterData.yValCount < Int(ceil(CGFloat(dataProvider.maxVisibleValueCount) * viewPortHandler.scaleX)))
         {
-            var dataSets = scatterData.dataSets as! [ScatterChartDataSet];
+            guard let dataSets = scatterData.dataSets as? [IScatterChartDataSet] else { return }
             
-            for (var i = 0; i < scatterData.dataSetCount; i++)
+            let phaseX = animator.phaseX
+            let phaseY = animator.phaseY
+            
+            var pt = CGPoint()
+            
+            for i in 0 ..< scatterData.dataSetCount
             {
-                var dataSet = dataSets[i];
+                let dataSet = dataSets[i]
                 
-                if (!dataSet.isDrawValuesEnabled)
+                if !dataSet.isDrawValuesEnabled || dataSet.entryCount == 0
                 {
-                    continue;
+                    continue
                 }
                 
-                var valueFont = dataSet.valueFont;
-                var valueTextColor = dataSet.valueTextColor;
+                let valueFont = dataSet.valueFont
                 
-                var formatter = dataSet.valueFormatter;
-                if (formatter === nil)
+                guard let formatter = dataSet.valueFormatter else { continue }
+                
+                let trans = dataProvider.getTransformer(dataSet.axisDependency)
+                let valueToPixelMatrix = trans.valueToPixelMatrix
+                
+                let entryCount = dataSet.entryCount
+                
+                let shapeSize = dataSet.scatterShapeSize
+                let lineHeight = valueFont.lineHeight
+                
+                for j in 0 ..< Int(ceil(CGFloat(entryCount) * phaseX))
                 {
-                    formatter = defaultValueFormatter;
-                }
-                
-                var entries = dataSet.yVals;
-                
-                var positions = delegate!.scatterChartRenderer(self, transformerForAxis: dataSet.axisDependency).generateTransformedValuesScatter(entries, phaseY: _animator.phaseY);
-                
-                var shapeSize = dataSet.scatterShapeSize;
-                var lineHeight = valueFont.lineHeight;
-                
-                for (var j = 0, count = Int(ceil(CGFloat(positions.count) * _animator.phaseX)); j < count; j++)
-                {
-                    if (!viewPortHandler.isInBoundsRight(positions[j].x))
+                    guard let e = dataSet.entryForIndex(j) else { break }
+                    
+                    pt.x = CGFloat(e.xIndex)
+                    pt.y = CGFloat(e.value) * phaseY
+                    pt = CGPointApplyAffineTransform(pt, valueToPixelMatrix)
+                    
+                    if (!viewPortHandler.isInBoundsRight(pt.x))
                     {
-                        break;
+                        break
                     }
                     
                     // make sure the lines don't do shitty things outside bounds
-                    if (j != 0 && (!viewPortHandler.isInBoundsLeft(positions[j].x)
-                        || !viewPortHandler.isInBoundsY(positions[j].y)))
+                    if ((!viewPortHandler.isInBoundsLeft(pt.x)
+                        || !viewPortHandler.isInBoundsY(pt.y)))
                     {
-                        continue;
+                        continue
                     }
                     
-                    var val = entries[j].value;
+                    let text = formatter.stringFromNumber(e.value)
                     
-                    var text = formatter!.stringFromNumber(val);
-                    
-                    ChartUtils.drawText(context: context, text: text!, point: CGPoint(x: positions[j].x, y: positions[j].y - shapeSize - lineHeight), align: .Center, attributes: [NSFontAttributeName: valueFont, NSForegroundColorAttributeName: valueTextColor]);
+                    ChartUtils.drawText(
+                        context: context,
+                        text: text!,
+                        point: CGPoint(
+                            x: pt.x,
+                            y: pt.y - shapeSize - lineHeight),
+                        align: .Center,
+                        attributes: [NSFontAttributeName: valueFont, NSForegroundColorAttributeName: dataSet.valueTextColorAt(j)]
+                    )
                 }
             }
         }
     }
     
-    public override func drawExtras(#context: CGContext)
+    public override func drawExtras(context context: CGContext)
     {
         
     }
     
-    public override func drawHighlighted(#context: CGContext, indices: [ChartHighlight])
+    private var _highlightPointBuffer = CGPoint()
+    
+    public override func drawHighlighted(context context: CGContext, indices: [ChartHighlight])
     {
-        var scatterData = delegate!.scatterChartRendererData(self);
-        var chartXMax = delegate!.scatterChartRendererChartXMax(self);
-        var chartYMax = delegate!.scatterChartRendererChartYMax(self);
-        var chartYMin = delegate!.scatterChartRendererChartYMin(self);
+        guard let
+            dataProvider = dataProvider,
+            scatterData = dataProvider.scatterData,
+            animator = animator
+            else { return }
         
-        CGContextSaveGState(context);
+        let chartXMax = dataProvider.chartXMax
         
-        var pts = [CGPoint](count: 4, repeatedValue: CGPoint());
+        CGContextSaveGState(context)
         
-        for (var i = 0; i < indices.count; i++)
+        for i in 0 ..< indices.count
         {
-            var set = scatterData.getDataSetByIndex(indices[i].dataSetIndex) as! ScatterChartDataSet!;
+            guard let set = scatterData.getDataSetByIndex(indices[i].dataSetIndex) as? IScatterChartDataSet else { continue }
             
-            if (set === nil)
+            if !set.isHighlightEnabled
             {
-                continue;
+                continue
             }
             
-            CGContextSetStrokeColorWithColor(context, set.highlightColor.CGColor);
-            CGContextSetLineWidth(context, set.highlightLineWidth);
+            CGContextSetStrokeColorWithColor(context, set.highlightColor.CGColor)
+            CGContextSetLineWidth(context, set.highlightLineWidth)
             if (set.highlightLineDashLengths != nil)
             {
-                CGContextSetLineDash(context, set.highlightLineDashPhase, set.highlightLineDashLengths!, set.highlightLineDashLengths!.count);
+                CGContextSetLineDash(context, set.highlightLineDashPhase, set.highlightLineDashLengths!, set.highlightLineDashLengths!.count)
             }
             else
             {
-                CGContextSetLineDash(context, 0.0, nil, 0);
+                CGContextSetLineDash(context, 0.0, nil, 0)
             }
             
-            var xIndex = indices[i].xIndex; // get the x-position
+            let xIndex = indices[i].xIndex; // get the x-position
             
-            if (CGFloat(xIndex) > CGFloat(chartXMax) * _animator.phaseX)
+            if (CGFloat(xIndex) > CGFloat(chartXMax) * animator.phaseX)
             {
-                continue;
+                continue
             }
             
-            var y = CGFloat(set.yValForXIndex(xIndex)) * _animator.phaseY; // get the y-position
+            let yVal = set.yValForXIndex(xIndex)
+            if (yVal.isNaN)
+            {
+                continue
+            }
             
-            pts[0] = CGPoint(x: CGFloat(xIndex), y: CGFloat(chartYMax));
-            pts[1] = CGPoint(x: CGFloat(xIndex), y: CGFloat(chartYMin));
-            pts[2] = CGPoint(x: 0.0, y: y);
-            pts[3] = CGPoint(x: CGFloat(chartXMax), y: y);
+            let y = CGFloat(yVal) * animator.phaseY; // get the y-position
             
-            var trans = delegate!.scatterChartRenderer(self, transformerForAxis: set.axisDependency);
+            _highlightPointBuffer.x = CGFloat(xIndex)
+            _highlightPointBuffer.y = y
             
-            trans.pointValuesToPixel(&pts);
+            let trans = dataProvider.getTransformer(set.axisDependency)
             
-            // draw the highlight lines
-            CGContextStrokeLineSegments(context, pts, pts.count);
+            trans.pointValueToPixel(&_highlightPointBuffer)
+            
+            // draw the lines
+            drawHighlightLines(context: context, point: _highlightPointBuffer, set: set)
         }
         
-        CGContextRestoreGState(context);
+        CGContextRestoreGState(context)
     }
 }
